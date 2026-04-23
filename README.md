@@ -3,143 +3,183 @@ Application de simulation de zoo avec Python et SQLite
 import sqlite3
 import time
 
-# -------------------------------
-# Création de la base de données
-# -------------------------------
-def creer_base():
-    connexion = sqlite3.connect("zoo.db")
-    curseur = connexion.cursor()
+# =========================
+# BASE DE DONNÉES
+# =========================
+class Database:
+    def __init__(self, db_name="zoo.db"):
+        self.db_name = db_name
+        self.creer_table()
 
-    curseur.execute("""
-    CREATE TABLE IF NOT EXISTS animaux (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nom TEXT,
-        espece TEXT,
-        faim INTEGER,
-        energie INTEGER
-    )
-    """)
+    def connect(self):
+        return sqlite3.connect(self.db_name)
 
-    connexion.commit()
-    connexion.close()
+    def creer_table(self):
+        conn = self.connect()
+        cur = conn.cursor()
+
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS animaux (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nom TEXT,
+            espece TEXT,
+            faim INTEGER,
+            energie INTEGER
+        )
+        """)
+
+        conn.commit()
+        conn.close()
+
+    def ajouter_animal(self, animal):
+        conn = self.connect()
+        cur = conn.cursor()
+
+        cur.execute("""
+        INSERT INTO animaux (nom, espece, faim, energie)
+        VALUES (?, ?, ?, ?)
+        """, (animal.nom, animal.espece, animal.faim, animal.energie))
+
+        conn.commit()
+        conn.close()
+
+    def obtenir_animaux(self):
+        conn = self.connect()
+        cur = conn.cursor()
+
+        cur.execute("SELECT * FROM animaux")
+        data = cur.fetchall()
+
+        conn.close()
+        return data
+
+    def update_simulation(self):
+        conn = self.connect()
+        cur = conn.cursor()
+
+        cur.execute("""
+        UPDATE animaux
+        SET faim = faim + 5,
+            energie = energie - 2
+        """)
+
+        conn.commit()
+        conn.close()
+
+    def nourrir(self, animal_id):
+        conn = self.connect()
+        cur = conn.cursor()
+
+        cur.execute("""
+        UPDATE animaux
+        SET faim = faim - 20
+        WHERE id = ?
+        """, (animal_id,))
+
+        conn.commit()
+        conn.close()
 
 
-# -------------------------------
-# Ajouter un animal
-# -------------------------------
-def ajouter_animal(nom, espece):
-    connexion = sqlite3.connect("zoo.db")
-    curseur = connexion.cursor()
+# =========================
+# CLASSE ANIMAL (POO)
+# =========================
+class Animal:
+    def __init__(self, nom, espece, faim=50, energie=100):
+        self.nom = nom
+        self.espece = espece
+        self.faim = faim
+        self.energie = energie
 
-    curseur.execute(
-        "INSERT INTO animaux (nom, espece, faim, energie) VALUES (?, ?, ?, ?)",
-        (nom, espece, 50, 100)
-    )
-
-    connexion.commit()
-    connexion.close()
-    print("Animal ajouté !")
+    def afficher(self):
+        return f"{self.nom} ({self.espece}) | Faim:{self.faim} | Energie:{self.energie}"
 
 
-# -------------------------------
-# Afficher les animaux
-# -------------------------------
-def afficher_animaux():
-    connexion = sqlite3.connect("zoo.db")
-    curseur = connexion.cursor()
+# =========================
+# ZOO (LOGIQUE PRINCIPALE)
+# =========================
+class Zoo:
+    def __init__(self):
+        self.db = Database()
 
-    curseur.execute("SELECT * FROM animaux")
-    animaux = curseur.fetchall()
+    def ajouter_animal(self):
+        nom = input("Nom : ")
+        espece = input("Espèce : ")
 
-    if len(animaux) == 0:
-        print("Aucun animal dans le zoo.")
-    else:
+        animal = Animal(nom, espece)
+        self.db.ajouter_animal(animal)
+
+        print("✔ Animal ajouté au zoo.")
+
+    def afficher_animaux(self):
+        animaux = self.db.obtenir_animaux()
+
+        if not animaux:
+            print("Aucun animal.")
+            return
+
+        print("\n--- ZOO ---")
         for a in animaux:
-            print(f"ID:{a[0]} | Nom:{a[1]} | Espèce:{a[2]} | Faim:{a[3]} | Energie:{a[4]}")
+            print(f"[ID:{a[0]}] {a[1]} ({a[2]}) | Faim:{a[3]} | Energie:{a[4]}")
 
-    connexion.close()
+    def nourrir_animal(self):
+        try:
+            animal_id = int(input("ID de l'animal : "))
+            self.db.nourrir(animal_id)
+            print("🍖 Animal nourri.")
+        except ValueError:
+            print("❌ ID invalide.")
 
+    def simulation(self):
+        print("⏳ Simulation en cours (CTRL+C pour arrêter)")
 
-# -------------------------------
-# Nourrir un animal
-# -------------------------------
-def nourrir_animal(id):
-    connexion = sqlite3.connect("zoo.db")
-    curseur = connexion.cursor()
+        try:
+            while True:
+                self.db.update_simulation()
+                print("Le temps passe dans le zoo...")
+                time.sleep(3)
 
-    curseur.execute(
-        "UPDATE animaux SET faim = faim - 20 WHERE id = ?",
-        (id,)
-    )
-
-    connexion.commit()
-    connexion.close()
-    print("Animal nourri !")
-
-
-# -------------------------------
-# Simulation automatique
-# -------------------------------
-def simulation():
-    print("Simulation en cours... (CTRL+C pour arrêter)")
-    try:
-        while True:
-            connexion = sqlite3.connect("zoo.db")
-            curseur = connexion.cursor()
-
-            curseur.execute("""
-            UPDATE animaux 
-            SET faim = faim + 5, energie = energie - 2
-            """)
-
-            connexion.commit()
-            connexion.close()
-
-            print("Le temps passe dans le zoo...")
-            time.sleep(5)
-
-    except KeyboardInterrupt:
-        print("\nSimulation arrêtée.")
+        except KeyboardInterrupt:
+            print("\nSimulation arrêtée.")
 
 
-# -------------------------------
-# Menu principal
-# -------------------------------
+# =========================
+# MENU
+# =========================
 def menu():
-    creer_base()
+    zoo = Zoo()
 
     while True:
-        print("\n----- ZOO SIMULATION -----")
+        print("\n===== ZOO SIMULATION =====")
         print("1. Ajouter un animal")
-        print("2. Voir les animaux")
+        print("2. Afficher les animaux")
         print("3. Nourrir un animal")
-        print("4. Lancer simulation")
+        print("4. Simulation")
         print("5. Quitter")
 
         choix = input("Choix : ")
 
         if choix == "1":
-            nom = input("Nom : ")
-            espece = input("Espèce : ")
-            ajouter_animal(nom, espece)
+            zoo.ajouter_animal()
 
         elif choix == "2":
-            afficher_animaux()
+            zoo.afficher_animaux()
 
         elif choix == "3":
-            id = int(input("ID de l'animal : "))
-            nourrir_animal(id)
+            zoo.nourrir_animal()
 
         elif choix == "4":
-            simulation()
+            zoo.simulation()
 
         elif choix == "5":
-            print("Au revoir !")
+            print("Fin du programme.")
             break
 
         else:
             print("Choix invalide.")
 
 
-# Lancer le programme
-menu()
+# =========================
+# LANCEMENT
+# =========================
+if __name__ == "__main__":
+    menu()
